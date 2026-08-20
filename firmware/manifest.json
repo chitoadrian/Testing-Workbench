@@ -1,0 +1,21 @@
+{
+  "firmware": "HW-WORKBENCH",
+  "version": "1.0.0",
+  "generatedWith": "arduino-cli 1.5.1, arduino:avr 1.8.8",
+  "images": {
+    "uno": {
+      "file": "uno/testing-workbench.hex",
+      "board": "arduino:avr:uno",
+      "protocol": "STK500v1/Optiboot",
+      "bootloaderBaud": 115200,
+      "sha256": "c18745a2e0d67fbef896d66795c20c86221e44cfc06d21f52aa914d15e806679"
+    },
+    "mega": {
+      "file": "mega/testing-workbench.hex",
+      "board": "arduino:avr:mega",
+      "protocol": "STK500v2/wiring",
+      "bootloaderBaud": 115200,
+      "sha256": "e54fc3058c733684d75a0cb4e8e6a390458a0247fede0937f5d6e492ed032714"
+    }
+  }
+}
