@@ -5,8 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#090d12">
   <title>HW Workbench — Serial Testing Console</title>
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="diagnostics.css">
+  <script>
+    window.__HW_BUILD_VERSION__ = '2026.08.20.1';
+    window.__HW_WORKBENCH_READY__ = false;
+    (function () {
+      var version = encodeURIComponent(window.__HW_BUILD_VERSION__);
+      ['styles.css', 'diagnostics.css'].forEach(function (href) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = href + '?v=' + version;
+        document.head.appendChild(link);
+      });
+    }());
+  </script>
 </head>
 <body>
   <div class="shell">
@@ -43,8 +53,10 @@
         <ul class="system-checks" aria-label="Estado del sistema">
           <li id="checkInterface"><span>○</span> Interfaz</li>
           <li id="checkJavaScript"><span>○</span> JavaScript</li>
+          <li id="checkUiControls"><span>○</span> Controles UI</li>
           <li id="checkWebSerial"><span>○</span> Web Serial</li>
           <li id="checkSecureContext"><span>○</span> Contexto seguro</li>
+          <li id="checkFirmwareResources"><span>○</span> Recursos firmware</li>
           <li id="checkUsbDevice"><span>○</span> Dispositivo USB</li>
           <li id="checkAuthorized"><span>○</span> Puerto autorizado</li>
           <li id="checkPortOpen"><span>○</span> Puerto abierto</li>
@@ -60,6 +72,7 @@
           <button id="retryDiagnosticsBtn" class="button secondary">Reintentar diagnóstico</button>
         </div>
         <p id="diagnosticMessage" class="diagnostic-message">Comprobando Web Serial...</p>
+        <p id="environmentInfo" class="environment-info">Build pendiente</p>
       </section>
 
       <section class="firmware-panel panel" aria-labelledby="firmwareTitle">
@@ -92,24 +105,24 @@
 
           <div class="tab-panel active" id="actuators">
             <div class="component-grid">
-              <div class="component-card"><div class="component-icon amber">●</div><div><h4>LED</h4><p>Blink y salida PWM</p></div><div class="card-actions"><button data-command="SET:LED:1" data-component="LED">Encender</button><button data-command="SET:LED:0" data-component="LED">Apagar</button><button data-command="BLINK:LED:10" data-component="LED">Blink ×10</button></div><label class="range-label">PWM <output id="pwmValue">128</output><input id="pwmSlider" type="range" min="0" max="255" value="128"></label><button class="inject" id="pwmSend">Inyectar PWM</button></div>
-              <div class="component-card"><div class="component-icon blue">♪</div><div><h4>Buzzer</h4><p>Tono configurable</p></div><label class="range-label">Frecuencia <output id="toneValue">1000 Hz</output><input id="toneSlider" type="range" min="100" max="4000" step="100" value="1000"></label><div class="card-actions"><button class="inject" id="toneSend">Inyectar / Probar</button><button class="inject danger" data-command="BUZZER:STOP" data-component="BUZZER">Detener</button></div></div>
-              <div class="component-card"><div class="component-icon red">R</div><div><h4>Relé</h4><p>Conmutación digital</p></div><div class="card-actions"><button data-command="SET:RELAY:1" data-component="RELAY">ON</button><button data-command="SET:RELAY:0" data-component="RELAY">OFF</button></div><button class="inject" data-command="PULSE:RELAY:500" data-component="RELAY">Pulso 500 ms</button></div>
+              <div class="component-card"><div class="component-icon amber">●</div><div><h4>LED</h4><p>Blink y salida PWM</p></div><div class="card-actions"><button data-hardware-control data-command="SET:LED:1" data-component="LED">Encender</button><button data-hardware-control data-command="SET:LED:0" data-component="LED">Apagar</button><button data-hardware-control data-command="BLINK:LED:10" data-component="LED">Blink ×10</button></div><label class="range-label">PWM <output id="pwmValue">128</output><input id="pwmSlider" type="range" min="0" max="255" value="128"></label><button class="inject" id="pwmSend" data-hardware-control>Inyectar PWM</button></div>
+              <div class="component-card"><div class="component-icon blue">♪</div><div><h4>Buzzer</h4><p>Tono configurable</p></div><label class="range-label">Frecuencia <output id="toneValue">1000 Hz</output><input id="toneSlider" type="range" min="100" max="4000" step="100" value="1000"></label><div class="card-actions"><button class="inject" id="toneSend" data-hardware-control>Inyectar / Probar</button><button class="inject danger" data-hardware-control data-command="BUZZER:STOP" data-component="BUZZER">Detener</button></div></div>
+              <div class="component-card"><div class="component-icon red">R</div><div><h4>Relé</h4><p>Conmutación digital</p></div><div class="card-actions"><button data-hardware-control data-command="SET:RELAY:1" data-component="RELAY">ON</button><button data-hardware-control data-command="SET:RELAY:0" data-component="RELAY">OFF</button></div><button class="inject" data-hardware-control data-command="PULSE:RELAY:500" data-component="RELAY">Pulso 500 ms</button></div>
             </div>
           </div>
 
           <div class="tab-panel" id="sensors">
             <div class="component-grid">
-              <div class="component-card"><div class="component-icon cyan">°</div><div><h4>DHT11 / DHT22</h4><p>Temperatura y humedad</p></div><div class="reading"><strong id="tempReading">— °C</strong><span id="humidityReading">— % RH</span></div><button class="inject" data-command="GET:TEMP" data-component="DHT">Leer sensor</button></div>
-              <div class="component-card"><div class="component-icon green">↔</div><div><h4>HC-SR04</h4><p>Distancia ultrasónica</p></div><div class="reading"><strong id="distanceReading">— cm</strong></div><button class="inject" data-command="GET:DISTANCE" data-component="HC-SR04">Medir distancia</button></div>
-              <div class="component-card"><div class="component-icon purple">☼</div><div><h4>LDR</h4><p>Luminosidad analógica</p></div><div class="reading"><strong id="ldrReading">— / 1023</strong></div><button class="inject" data-command="GET:LDR" data-component="LDR">Leer luminosidad</button></div>
+              <div class="component-card"><div class="component-icon cyan">°</div><div><h4>DHT11 / DHT22</h4><p>Temperatura y humedad</p></div><div class="reading"><strong id="tempReading">— °C</strong><span id="humidityReading">— % RH</span></div><button class="inject" data-hardware-control data-command="GET:TEMP" data-component="DHT">Leer sensor</button></div>
+              <div class="component-card"><div class="component-icon green">↔</div><div><h4>HC-SR04</h4><p>Distancia ultrasónica</p></div><div class="reading"><strong id="distanceReading">— cm</strong></div><button class="inject" data-hardware-control data-command="GET:DISTANCE" data-component="HC-SR04">Medir distancia</button></div>
+              <div class="component-card"><div class="component-icon purple">☼</div><div><h4>LDR</h4><p>Luminosidad analógica</p></div><div class="reading"><strong id="ldrReading">— / 1023</strong></div><button class="inject" data-hardware-control data-command="GET:LDR" data-component="LDR">Leer luminosidad</button></div>
             </div>
           </div>
 
           <div class="tab-panel" id="motors">
             <div class="component-grid two">
-              <div class="component-card"><div class="component-icon cyan">S</div><div><h4>Servomotor</h4><p>Posición angular</p></div><label class="range-label">Ángulo <output id="servoValue">90°</output><input id="servoSlider" type="range" min="0" max="180" value="90"></label><button class="inject" id="servoSend">Mover servo</button></div>
-              <div class="component-card"><div class="component-icon amber">M</div><div><h4>Motor DC</h4><p>Velocidad y dirección</p></div><label class="range-label">Velocidad <output id="motorValue">50%</output><input id="motorSlider" type="range" min="0" max="100" value="50"></label><div class="card-actions"><button id="motorForward">Adelante</button><button id="motorReverse">Reversa</button></div><button class="inject danger" data-command="MOTOR:STOP" data-component="MOTOR">Detener</button></div>
+              <div class="component-card"><div class="component-icon cyan">S</div><div><h4>Servomotor</h4><p>Posición angular</p></div><label class="range-label">Ángulo <output id="servoValue">90°</output><input id="servoSlider" type="range" min="0" max="180" value="90"></label><button class="inject" id="servoSend" data-hardware-control>Mover servo</button></div>
+              <div class="component-card"><div class="component-icon amber">M</div><div><h4>Motor DC</h4><p>Velocidad y dirección</p></div><label class="range-label">Velocidad <output id="motorValue">50%</output><input id="motorSlider" type="range" min="0" max="100" value="50"></label><div class="card-actions"><button id="motorForward" data-hardware-control>Adelante</button><button id="motorReverse" data-hardware-control>Reversa</button></div><button class="inject danger" data-hardware-control data-command="MOTOR:STOP" data-component="MOTOR">Detener</button></div>
             </div>
           </div>
         </article>
@@ -138,6 +151,25 @@
     </main>
   </div>
   <div id="toast" class="toast" role="alert"></div>
-  <script type="module" src="app.js"></script>
+  <script>
+    (function () {
+      var module = document.createElement('script');
+      module.type = 'module';
+      module.src = 'app.js?v=' + encodeURIComponent(window.__HW_BUILD_VERSION__);
+      module.onerror = function () { window.__HW_MODULE_LOAD_FAILED__ = true; };
+      document.body.appendChild(module);
+      window.setTimeout(function () {
+        if (window.__HW_WORKBENCH_READY__) return;
+        var card = document.getElementById('initErrorCard');
+        var moduleName = document.getElementById('initErrorModule');
+        var message = document.getElementById('initErrorMessage');
+        if (card && moduleName && message) {
+          card.hidden = false;
+          moduleName.textContent = 'JavaScript principal';
+          message.textContent = 'El módulo principal de JavaScript no pudo iniciar. Recargue la página, pruebe Ctrl+F5, utilice Chrome/Edge actualizado y compruebe la conexión a Internet.';
+        }
+      }, 5000);
+    }());
+  </script>
 </body>
 </html>

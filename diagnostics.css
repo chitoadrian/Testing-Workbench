@@ -8,6 +8,8 @@ button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
 .system-checks .ok{color:var(--green)}
 .diagnostic-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 .diagnostic-message{grid-column:1/-1;border-top:1px solid var(--line);padding-top:11px}
+.environment-info{grid-column:1/-1;margin:0;color:var(--muted);font-size:10px;letter-spacing:.02em}
+.system-checks .failed{color:#ff8c8c}
 .init-error{margin-top:12px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-color:#6b3030}
 .init-error[hidden]{display:none}
 .init-error strong{color:#ff8c8c}.init-error p{margin:4px 0 0;color:var(--muted);font-size:11px}

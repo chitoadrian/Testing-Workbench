@@ -4,8 +4,8 @@ import {Stk500v1} from './stk500v1.js';
 import {Stk500v2} from './stk500v2.js';
 
 export const BOARD_PROFILES={
-  uno:{label:'Arduino Uno',baud:115200,pageSize:128,maximumSize:32256,hex:'firmware/uno/testing-workbench.hex',Protocol:Stk500v1},
-  mega:{label:'Arduino Mega 2560',baud:115200,pageSize:256,maximumSize:253952,hex:'firmware/mega/testing-workbench.hex',Protocol:Stk500v2}
+  uno:{label:'Arduino Uno',baud:115200,pageSize:128,maximumSize:32256,hex:'./firmware/uno/testing-workbench.hex',Protocol:Stk500v1},
+  mega:{label:'Arduino Mega 2560',baud:115200,pageSize:256,maximumSize:253952,hex:'./firmware/mega/testing-workbench.hex',Protocol:Stk500v2}
 };
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -19,7 +19,7 @@ export class FirmwareManager{
   progress(update){const base=update.phase==='write'?15:85,span=update.phase==='write'?70:13;const percent=base+span*update.completed/update.total;const action=update.phase==='write'?'Cargando firmware':'Verificando';this.setState(`${action}...`,`${action}: página ${update.completed}/${update.total} · 0x${update.address.toString(16)}`,percent);}
   async resetBootloader(port){if(typeof port.setSignals==='function'){try{await port.setSignals({dataTerminalReady:false,requestToSend:false});await sleep(60);await port.setSignals({dataTerminalReady:true,requestToSend:false});await sleep(80);await port.setSignals({dataTerminalReady:false,requestToSend:false});}catch(error){console.warn('[FIRMWARE] setSignals no disponible; se usa el reset producido por port.open()',error);}}await sleep(120);}
   async install(){
-    if(this.busy)return;const key=this.e.board.value,profile=BOARD_PROFILES[key],port=this.app.port||this.app.authorizedPorts[0];if(!port)return this.setState('Error de carga','Seleccione primero un puerto Serial.',0);
+    if(this.busy)return this.setState('Operación en curso','La instalación de firmware ya está en curso, espere...',Number.parseFloat(this.e.progress.style.width)||0);const key=this.e.board.value,profile=BOARD_PROFILES[key],port=this.app.port||this.app.authorizedPorts[0];if(!port)return this.setState('Error de carga','Seleccione primero un puerto Serial.',0);
     this.busy=true;this.app.connectionInProgress=true;this.e.panel.classList.add('flashing');this.e.install.disabled=true;let transport;
     try{
       this.setState('Preparando carga...','Cerrando modo Workbench.',2);await this.app.cleanupSerialConnection('firmware-upload',{keepUI:true});
@@ -33,5 +33,5 @@ export class FirmwareManager{
     }catch(error){console.error('[FIRMWARE ERROR]',error);this.setState('Error de carga',this.explain(error),0);try{await transport?.close();}catch{}await this.app.cleanupSerialConnection('firmware-error',{keepUI:true});}
     finally{this.busy=false;this.app.connectionInProgress=false;this.e.panel.classList.remove('flashing');this.refreshPort();this.app.setConnectionControlsBusy(false);}
   }
-  explain(error){if(error.name==='TimeoutError')return'Bootloader sin respuesta. Verifique placa seleccionada y vuelva a intentar.';if(/Firma inesperada/.test(error.message))return`${error.message}. Seleccione la placa correcta.`;if(/Verificación falló/.test(error.message))return error.message;return error.message||'Fallo desconocido durante la carga.';}
+  explain(error){const messages={SecurityError:'Web Serial está disponible, pero el navegador o la política de esta computadora bloqueó el acceso USB.',NotAllowedError:'El permiso para acceder al puerto Serial fue rechazado.',NotFoundError:'No se seleccionó ningún puerto Serial.',NetworkError:'El puerto Serial está siendo utilizado por otra aplicación o dejó de estar disponible.',InvalidStateError:'El puerto Serial está en un estado inválido. Reinicie la sesión Serial.',AbortError:'La operación de firmware fue cancelada.',TimeoutError:'Bootloader sin respuesta. Verifique placa seleccionada y vuelva a intentar.'};if(messages[error.name])return messages[error.name];if(/Firma inesperada/.test(error.message))return`${error.message}. Seleccione la placa correcta.`;if(/Verificación falló/.test(error.message))return error.message;return error.message||'Fallo desconocido durante la carga.';}
 }

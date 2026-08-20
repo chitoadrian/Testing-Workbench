@@ -1,6 +1,5 @@
-import {FirmwareManager} from './firmware-manager.js';
-
 const TIMEOUT = 2500;
+const BUILD_VERSION = window.__HW_BUILD_VERSION__ || 'dev';
 const RESET_DELAY = 1800;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -20,13 +19,14 @@ class SerialWorkbench {
     this.pendingFirmwareInfo = new Set();
     this.decoder = new TextDecoder();
     this.metrics = { cycles: 0, operationMs: 0, errors: 0 };
+    this.registeredListeners = new Set();
     this.e = this.cacheElements();
   }
 
   cacheElements() {
     const ids = ['baudRate','connectBtn','statusBadge','sessionTime','rxCount','txCount','latency','startupStatus',
       'diagnosticMessage','searchDeviceBtn','reconnectBtn','retryDiagnosticsBtn','checkInterface','checkJavaScript',
-      'checkWebSerial','checkSecureContext','checkUsbDevice','checkAuthorized','checkPortOpen','checkFirmware','checkArduino',
+      'checkUiControls','checkWebSerial','checkSecureContext','checkFirmwareResources','checkUsbDevice','checkAuthorized','checkPortOpen','checkFirmware','checkArduino','environmentInfo',
       'testPingBtn','resetSerialBtn','forgetDeviceBtn','initErrorCard','initErrorModule','initErrorMessage','retryInitBtn',
       'commandForm','commandInput','clearBtn','pauseBtn','autoscroll','terminal','toast','resetMetrics','stressBtn',
       'cancelStressBtn','stressStatus','stressProgress','pwmSlider','pwmValue','toneSlider','toneValue','servoSlider',
@@ -42,9 +42,10 @@ class SerialWorkbench {
       ['Health Check',()=>this.initHealth()],['Stress Test',()=>this.initStress()]];
     for (const [name, init] of modules) {
       try { await Promise.resolve(init()); }
-      catch (error) { console.error(`[${name}]`, error); this.showInitError(name, error); }
+      catch (error) { console.error(`[INIT ERROR] ${name}: ${error?.message||error}`); this.showInitError(name, error); }
     }
     this.startup('Interfaz lista');
+    window.__HW_WORKBENCH_READY__ = true;
     await this.runDiagnostics();
   }
 
@@ -52,9 +53,9 @@ class SerialWorkbench {
     this.require(['connectBtn','statusBadge','startupStatus','toast']);
     this.check('checkInterface', true, 'Interfaz'); this.check('checkJavaScript', true, 'JavaScript');
     this.setHardwareReady(false);
-    this.e.connectBtn.addEventListener('click', () => this.portIsOpen ? this.disconnect() : this.connectSelectedOrPick());
-    this.e.baudRate.addEventListener('change', () => { if(this.e.baudRate.value!=='115200')this.toast('El firmware actual utiliza 115200.'); });
-    this.e.retryInitBtn?.addEventListener('click', () => { this.e.initErrorCard.hidden = true; void this.runDiagnostics(); });
+    this.on('connectBtn','click', () => this.portIsOpen ? this.disconnect() : this.connectSelectedOrPick());
+    this.on('baudRate','change', () => { if(this.e.baudRate.value!=='115200')this.toast('El firmware actual utiliza 115200.'); });
+    this.on('retryInitBtn','click', () => { this.e.initErrorCard.hidden = true; void this.runDiagnostics(); });
   }
   initSerial() {
     if ('serial' in navigator) {
@@ -76,21 +77,21 @@ class SerialWorkbench {
       try{this.writer?.releaseLock();}catch{}
     });
   }
-  initFirmwareManager(){this.firmwareManager=new FirmwareManager(this);this.firmwareManager.init();}
+  async initFirmwareManager(){const module=await import(`./firmware-manager.js?v=${encodeURIComponent(BUILD_VERSION)}`);this.firmwareManager=new module.FirmwareManager(this);this.firmwareManager.init();this.registeredListeners.add('installFirmwareBtn:click');this.registeredListeners.add('firmwareBoard:change');}
   initDiagnostics() {
     this.require(['searchDeviceBtn','reconnectBtn','testPingBtn','resetSerialBtn','forgetDeviceBtn','retryDiagnosticsBtn','diagnosticMessage']);
-    this.e.searchDeviceBtn.addEventListener('click', () => this.connectWithPicker());
-    this.e.reconnectBtn.addEventListener('click', () => this.reconnectAuthorized());
-    this.e.testPingBtn.addEventListener('click', () => this.testPing());
-    this.e.resetSerialBtn.addEventListener('click', () => this.resetSerialSession());
-    this.e.forgetDeviceBtn.addEventListener('click', () => this.forgetOrChangeDevice());
-    this.e.retryDiagnosticsBtn.addEventListener('click', () => this.runDiagnostics());
+    this.on('searchDeviceBtn','click', () => this.connectWithPicker());
+    this.on('reconnectBtn','click', () => this.reconnectAuthorized());
+    this.on('testPingBtn','click', () => this.testPing());
+    this.on('resetSerialBtn','click', () => this.resetSerialSession());
+    this.on('forgetDeviceBtn','click', () => this.forgetOrChangeDevice());
+    this.on('retryDiagnosticsBtn','click', () => this.runDiagnostics());
   }
   initGallery() {
-    document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => this.activateTab(tab)));
+    document.querySelectorAll('.tab').forEach(tab => {tab.addEventListener('click', () => this.activateTab(tab));this.registeredListeners.add(`tab:${tab.dataset.tab}:click`);});
     document.querySelectorAll('[data-command]').forEach(button => {
       button.dataset.hardwareControl = '';
-      button.addEventListener('click', () => this.send(button.dataset.command, button.dataset.component));
+      button.addEventListener('click', () => this.send(button.dataset.command, button.dataset.component));this.registeredListeners.add(`command:${button.dataset.command}:click`);
     });
     ['pwmSend','toneSend','servoSend','motorForward','motorReverse'].forEach(id => { this.e[id].dataset.hardwareControl = ''; });
     this.linkRange('pwmSlider','pwmValue',v=>v); this.linkRange('toneSlider','toneValue',v=>`${v} Hz`);
@@ -104,9 +105,9 @@ class SerialWorkbench {
   }
   initMonitor() {
     this.require(['commandForm','commandInput','clearBtn','pauseBtn','terminal']);
-    this.e.commandForm.addEventListener('submit', event => { event.preventDefault(); const value=this.e.commandInput.value; this.e.commandInput.value=''; void this.send(value); });
-    this.e.clearBtn.addEventListener('click', () => this.e.terminal.replaceChildren());
-    this.e.pauseBtn.addEventListener('click', () => { this.paused=!this.paused; this.e.pauseBtn.textContent=this.paused?'Reanudar':'Pausar'; });
+    this.on('commandForm','submit', event => { event.preventDefault(); const value=this.e.commandInput.value; this.e.commandInput.value=''; void this.send(value); });
+    this.on('clearBtn','click', () => this.e.terminal.replaceChildren());
+    this.on('pauseBtn','click', () => { this.paused=!this.paused; this.e.pauseBtn.textContent=this.paused?'Reanudar':'Pausar'; });
   }
   initMetrics() {
     this.metrics=this.loadMetrics(); this.renderMetrics();
@@ -124,7 +125,10 @@ class SerialWorkbench {
   async runDiagnostics(options={}) {
     this.startup('Comprobando Web Serial...'); if(!options.preserveMessage)this.message('Comprobando navegador, contexto y puertos autorizados…');
     const file=location.protocol==='file:', secure=window.isSecureContext&&!file, serial='serial' in navigator, embedded=this.isEmbedded();
-    this.check('checkWebSerial',serial,'Web Serial'); this.check('checkSecureContext',secure,'Contexto seguro');
+    const ui=this.auditUiControls();this.checkResult('checkUiControls',ui.ok,'Controles UI',ui.failures.join(', '));
+    const resources=await this.checkFirmwareResources();this.checkResult('checkFirmwareResources',resources.ok,'Recursos firmware',resources.failures.join(', '));
+    this.renderEnvironment();
+    this.checkResult('checkWebSerial',serial,'Web Serial',serial?'':'no disponible'); this.checkResult('checkSecureContext',secure,'Contexto seguro',file?'archivo local':secure?'':'requiere HTTPS o localhost');
     this.e.searchDeviceBtn.disabled=this.connectionInProgress||!serial||!secure||embedded; this.e.reconnectBtn.disabled=true;
     this.check('checkPortOpen',this.portIsOpen,'Puerto abierto');
     this.check('checkFirmware',this.hardwareReady,'Firmware responde');
@@ -151,17 +155,21 @@ class SerialWorkbench {
     }
   }
   diagnosticStop(text) { this.startup('No disponible'); this.message(text); }
-  browser() { const ua=navigator.userAgent; return /Edg\//.test(ua)?'Microsoft Edge':/Chrome\//.test(ua)?'Google Chrome':/Chromium\/|OPR\//.test(ua)?'navegador Chromium':'navegador actual'; }
+  browser() { const ua=navigator.userAgent; const match=ua.match(/(?:Edg|Chrome|Chromium)\/(\d+)/);const name=/Edg\//.test(ua)?'Microsoft Edge':/Chrome\//.test(ua)?'Google Chrome':/Chromium\//.test(ua)?'Chromium':'otro';return `${name}${match?` ${match[1]}`:''}`; }
+  system(){const ua=navigator.userAgent;return /Windows/i.test(ua)?'Windows':/Mac OS/i.test(ua)?'macOS':/Linux/i.test(ua)?'Linux':'otro';}
+  renderEnvironment(){if(this.e.environmentInfo)this.e.environmentInfo.textContent=`Navegador: ${this.browser()} · Sistema: ${this.system()} · Contexto: ${location.protocol.replace(':','')||'desconocido'} · Build ${BUILD_VERSION}`;}
+  auditUiControls(){const required=new Set(['connectBtn:click','searchDeviceBtn:click','reconnectBtn:click','testPingBtn:click','resetSerialBtn:click','retryDiagnosticsBtn:click','commandForm:submit','clearBtn:click','pauseBtn:click','resetMetrics:click','stressBtn:click','pwmSlider:input','toneSlider:input','servoSlider:input','motorSlider:input','installFirmwareBtn:click','firmwareBoard:change','tab:actuators:click','tab:sensors:click','tab:motors:click']);document.querySelectorAll('button,input,select,form').forEach(control=>{if(control.matches?.('[data-command]'))required.add(`command:${control.dataset.command}:click`);else if(control.matches?.('.tab'))required.add(`tab:${control.dataset.tab}:click`);else if(control.tagName==='BUTTON'&&control.id)required.add(`${control.id}:click`);else if(control.tagName==='INPUT'&&control.type==='range')required.add(`${control.id}:input`);else if(control.tagName==='SELECT')required.add(`${control.id}:change`);else if(control.tagName==='FORM')required.add(`${control.id}:submit`);});const failures=[...required].filter(key=>!this.registeredListeners.has(key));return{ok:failures.length===0,failures};}
+  async checkFirmwareResources(){const paths=['./firmware/manifest.json','./firmware/uno/testing-workbench.hex','./firmware/mega/testing-workbench.hex'],failures=[];for(const path of paths){try{const response=await withTimeout(fetch(path,{method:'HEAD',cache:'no-store'}),2500,`Timeout: ${path}`);if(!response.ok)failures.push(`${path} (${response.status})`);}catch(error){failures.push(`${path} (${error.name||'error'})`);}}return{ok:failures.length===0,failures};}
   isEmbedded() { try{return window.self!==window.top;}catch(error){console.warn('No se pudo comprobar el iframe.',error);return true;} }
 
   async connectSelectedOrPick() {
-    if(this.connectionInProgress)return;
+    if(this.connectionInProgress)return this.toast('Operación en curso, espere...');
     const candidate=this.port||this.authorizedPorts[0];
     if(!candidate)return this.connectWithPicker();
     return this.connectPort(candidate,true);
   }
   async connectWithPicker() {
-    if(this.connectionInProgress)return;
+    if(this.connectionInProgress)return this.toast('Operación en curso, espere...');
     if (!('serial' in navigator)) return this.diagnosticStop('Este navegador no tiene Web Serial disponible. Utilice una versión actual de Chrome o Edge.');
     if (!window.isSecureContext||location.protocol==='file:'||this.isEmbedded()) return this.runDiagnostics();
     this.connectionInProgress=true; this.setConnectionControlsBusy(true); this.connectionState('searching');
@@ -178,13 +186,13 @@ class SerialWorkbench {
     finally { this.connectionInProgress=false; this.setConnectionControlsBusy(false); }
   }
   async reconnectAuthorized() {
-    if(this.connectionInProgress)return;
+    if(this.connectionInProgress)return this.toast('Operación en curso, espere...');
     const candidate=this.authorizedPorts[0];
     if (!candidate) return this.toast('No hay un Arduino autorizado. Pulse Buscar dispositivo.');
     return this.connectPort(candidate,true);
   }
   async connectPort(candidate,isAuthorized=false) {
-    if(this.connectionInProgress)return;
+    if(this.connectionInProgress)return this.toast('Operación en curso, espere...');
     this.connectionInProgress=true; this.setConnectionControlsBusy(true);
     try { await this.cleanupSerialConnection('before-connect',{keepUI:true}); this.port=candidate; this.connectionState('selected'); await this.openPort(); }
     catch(error) { await this.connectionError(error,{stale:isAuthorized}); }
@@ -224,13 +232,14 @@ class SerialWorkbench {
     this.log(['NotFoundError','AbortError'].includes(error.name)?'system':'error',text); if(['NotFoundError','AbortError'].includes(error.name))this.toast(text);
   }
   async resetSerialSession() {
-    if(this.connectionInProgress)return;
+    if(this.connectionInProgress)return this.toast('Operación en curso, espere...');
     this.connectionInProgress=true; this.setConnectionControlsBusy(true);
     try { await this.cleanupSerialConnection('user-reset'); this.message('Sesión Serial reiniciada. Comprobando puertos autorizados…'); await this.runDiagnostics({preserveMessage:true}); this.message('Sesión Serial limpia. Puede reconectar o buscar dispositivo.'); }
     finally { this.connectionInProgress=false; this.setConnectionControlsBusy(false); }
   }
   async testPing() {
-    if(!this.portIsOpen||!this.writer||this.connectionInProgress)return this.toast('Abra primero un puerto Serial.');
+    if(this.connectionInProgress)return this.toast('Operación en curso, espere...');
+    if(!this.portIsOpen||!this.writer)return this.toast('Abra primero un puerto Serial.');
     this.e.testPingBtn.disabled=true; this.message('Probando PING…');
     const pong=this.waitForPong(2000);
     const sent=await this.sendRaw('PING');
@@ -325,13 +334,14 @@ class SerialWorkbench {
   async sendRaw(command) { if(!this.writer||!this.port||!this.portIsOpen)return false;const payload=`${command}\n`;console.debug('[SERIAL TX RAW]',JSON.stringify(payload));try{await withTimeout(this.writer.write(new TextEncoder().encode(payload)));this.e.txCount.textContent=String(Number(this.e.txCount.textContent)+1);this.log('tx',command);return true;}catch(error){this.registerError(`Escritura serial: ${error.message}`);this.serialError(error,'write');if(this.hardwareReady)void this.cleanupSerialConnection('write-error');return false;} }
 
   async runStressTest() {
+    if(this.stressRunning)return this.toast('Stress Test en curso, espere...');
     if(!this.hardwareReady)return this.toast('Conecte un Arduino para utilizar este control.');
-    this.stressCancelled=false;this.e.stressBtn.disabled=true;this.e.cancelStressBtn.hidden=false;const samples=[];let success=0;
+    this.stressRunning=true;this.stressCancelled=false;this.e.stressBtn.disabled=true;this.e.cancelStressBtn.hidden=false;const samples=[];let success=0;
     for(let i=1;i<=10&&!this.stressCancelled&&this.hardwareReady;i++){this.e.stressStatus.textContent=`Prueba ${i} de 10…`;this.e.stressProgress.style.width=`${i*10}%`;const pong=this.waitForPong(1200);if(await this.send('PING','STRESS')){const latency=await pong;if(latency!=null){samples.push(latency);success++;}}await delay(100);}
     const avg=samples.length?Math.round(samples.reduce((a,b)=>a+b,0)/samples.length):null;
     const min=samples.length?Math.round(Math.min(...samples)):null,max=samples.length?Math.round(Math.max(...samples)):null;this.e.latency.textContent=avg==null?'Timeout':`${avg} ms`;
     this.e.stressStatus.textContent=this.stressCancelled?'Stress Test cancelado':`${success}/10 · ${avg==null?'sin respuesta':`mín ${min} · máx ${max} · prom ${avg} ms`}`;
-    if(!this.stressCancelled&&success<10){this.metrics.errors+=10-success;this.saveMetrics();this.renderMetrics();}this.e.cancelStressBtn.hidden=true;this.e.stressBtn.disabled=!this.hardwareReady;
+    if(!this.stressCancelled&&success<10){this.metrics.errors+=10-success;this.saveMetrics();this.renderMetrics();}this.stressRunning=false;this.e.cancelStressBtn.hidden=true;this.e.stressBtn.disabled=!this.hardwareReady;
   }
   setHardwareReady(ready) {
     this.hardwareReady=ready;document.querySelectorAll('[data-hardware-control]').forEach(control=>{control.disabled=!ready;control.title=ready?'':'Conecte un Arduino para utilizar este control.';control.setAttribute('aria-disabled',String(!ready));});
@@ -351,11 +361,12 @@ class SerialWorkbench {
   stopTimer(){clearInterval(this.sessionTimer);this.sessionTimer=null;} duration(ms){const s=Math.floor(ms/1000);return[Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(n=>String(n).padStart(2,'0')).join(':');}
 
   activateTab(tab){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===tab));document.querySelectorAll('.tab-panel').forEach(x=>x.classList.toggle('active',x.id===tab.dataset.tab));}
-  linkRange(input,output,format){this.on(input,'input',event=>{this.e[output].textContent=format(event.target.value);});} on(id,event,handler){if(!this.e[id])throw new Error(`Falta #${id}`);this.e[id].addEventListener(event,handler);}
+  linkRange(input,output,format){this.on(input,'input',event=>{this.e[output].textContent=format(event.target.value);});} on(id,event,handler){if(!this.e[id])throw new Error(`Falta #${id}`);const key=`${id}:${event}`;if(this.registeredListeners.has(key))return;this.e[id].addEventListener(event,handler);this.registeredListeners.add(key);}
   require(ids){const missing=ids.filter(id=>!this.e[id]);if(missing.length)throw new Error(`Faltan elementos: ${missing.join(', ')}`);}
   setStatus(kind,text){if(!this.e.statusBadge)return;this.e.statusBadge.className=`status ${kind}`;this.e.statusBadge.querySelector('span').textContent=text;}
   startup(text){if(this.e.startupStatus)this.e.startupStatus.textContent=text;} message(text){if(this.e.diagnosticMessage)this.e.diagnosticMessage.textContent=text;}
   check(id,ok,label){if(!this.e[id])return;this.e[id].className=ok?'ok':'pending';this.e[id].innerHTML=`<span>${ok?'✓':'○'}</span> ${label}`;}
+  checkResult(id,ok,label,detail=''){if(!this.e[id])return;this.e[id].className=ok?'ok':'failed';this.e[id].innerHTML=`<span>${ok?'✓':'✕'}</span> ${label}${!ok&&detail?` — ${detail}`:''}`;}
   showInitError(module,error){if(!this.e.initErrorCard)return;this.e.initErrorCard.hidden=false;this.e.initErrorModule.textContent=module;this.e.initErrorMessage.textContent=error?.message||String(error);}
   serialLog(message){console.info(`[SERIAL] ${message}`);}
   serialError(error,context=''){console.error(`[SERIAL ERROR]${context?` ${context}`:''}`,error?.name||'Error',error?.message||error);}
@@ -364,7 +375,7 @@ class SerialWorkbench {
 }
 
 let app;
-async function initializeApp(){if(app)return;app=new SerialWorkbench();window.serialWorkbench=app;await app.initialize();}
+async function initializeApp(){if(app)return app;app=new SerialWorkbench();window.serialWorkbench=app;await app.initialize();return app;}
 window.addEventListener('error',event=>{console.error('[Error global]',event.error||event.message);app?.showInitError('JavaScript',event.error||new Error(event.message));});
 window.addEventListener('unhandledrejection',event=>{console.error('[Promesa rechazada]',event.reason);app?.showInitError('Operación asíncrona',event.reason instanceof Error?event.reason:new Error(String(event.reason)));});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initializeApp,{once:true});else void initializeApp();

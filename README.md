@@ -2,6 +2,14 @@
 
 Panel local para controlar y diagnosticar hardware mediante Web Serial API.
 
+## Compatibilidad y diagnóstico entre computadoras
+
+La publicación usa una única constante `window.__HW_BUILD_VERSION__` en `index.html` para versionar los recursos propios y mostrar el build activo en Diagnóstico. Si el módulo principal no inicia, un bootstrap independiente muestra instrucciones de recarga y compatibilidad en lugar de dejar controles aparentemente inactivos.
+
+La interfaz general funciona en navegadores modernos aunque Web Serial no exista. El acceso físico al Arduino requiere Chrome, Edge o Chromium de escritorio con Web Serial habilitado, contexto HTTPS/localhost, permiso USB y ausencia de políticas administrativas que lo bloqueen. La aplicación detecta estas restricciones y no intenta evadirlas.
+
+Pruebas sin hardware: `node firmware-flasher.test.mjs`, `node serial-lifecycle.test.mjs` y `node ui-smoke.test.mjs`.
+
 ## Primera conexión sin Arduino IDE
 
 1. Conecte Arduino Uno o Mega 2560 por USB.
