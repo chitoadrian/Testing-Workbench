@@ -1,0 +1,18 @@
+.secondary{background:#19232e;border:1px solid #334353;color:var(--text)}
+button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+.diagnostics{margin-top:18px;padding:18px 22px;display:grid;grid-template-columns:minmax(150px,.7fr) minmax(280px,1fr) auto;gap:20px;align-items:center}
+.diagnostics h3{margin:5px 0}
+.startup-status,.diagnostic-message{color:var(--muted);font-size:11px;margin:5px 0 0}
+.system-checks{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:7px;font-size:11px;color:var(--muted)}
+.system-checks li span{display:inline-block;width:15px}
+.system-checks .ok{color:var(--green)}
+.diagnostic-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.diagnostic-message{grid-column:1/-1;border-top:1px solid var(--line);padding-top:11px}
+.init-error{margin-top:12px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-color:#6b3030}
+.init-error[hidden]{display:none}
+.init-error strong{color:#ff8c8c}.init-error p{margin:4px 0 0;color:var(--muted);font-size:11px}
+.cancel-stress{width:100%;margin-top:8px}
+.firmware-panel{margin-top:18px;padding:18px 22px;display:grid;grid-template-columns:1fr auto 1fr auto;gap:16px;align-items:center}.firmware-panel h3{margin:5px 0}.firmware-panel p{margin:4px 0;color:var(--muted);font-size:11px}.firmware-panel label{font-size:10px;color:var(--muted);text-transform:uppercase}.firmware-panel label select{display:block;margin-top:5px}.firmware-facts{display:flex;gap:20px}.firmware-facts span{font-size:10px;color:var(--muted)}.firmware-facts strong{display:block;color:var(--text);margin-top:5px}.firmware-progress{grid-column:1/-1;height:5px;background:#1a2732;overflow:hidden;border-radius:4px}.firmware-progress i{display:block;height:100%;width:0;background:var(--cyan);transition:width .15s}.firmware-panel .diagnostic-message{grid-column:1/-1;margin:0}.firmware-panel.flashing{border-color:#2a7666}
+@media(max-width:1100px){.diagnostics{grid-template-columns:1fr 1fr}.diagnostic-actions{grid-column:1/-1;justify-content:flex-start}}
+@media(max-width:850px){.firmware-panel{grid-template-columns:1fr 1fr}.firmware-facts{grid-column:1/-1}.firmware-panel button{width:100%}}@media(max-width:620px){.diagnostics,.firmware-panel{grid-template-columns:1fr}.system-checks{grid-template-columns:repeat(2,1fr)}.diagnostic-actions{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
