@@ -1,10 +1,10 @@
 # HW Testing Workbench
 
-Panel local para controlar y diagnosticar hardware mediante Web Serial API.
+Aplicación publicada en **https://chitoadrian.github.io/Testing-Workbench/** para controlar, recuperar, programar y diagnosticar Arduino mediante Web Serial API. No requiere Arduino IDE para la instalación normal del firmware incluido.
 
 ## Compatibilidad y diagnóstico entre computadoras
 
-La publicación usa una única constante `window.__HW_BUILD_VERSION__` en `index.html` para versionar los recursos propios y mostrar el build activo en Diagnóstico. Si el módulo principal no inicia, un bootstrap independiente muestra instrucciones de recarga y compatibilidad en lugar de dejar controles aparentemente inactivos.
+La publicación usa una única constante `window.__HW_BUILD_VERSION__` en `index.html` para versionar los recursos propios y mostrar el build activo en Diagnóstico. El build actual es `2026.08.27.1`; el query string obliga a GitHub Pages y al navegador a solicitar los recursos actualizados.
 
 La interfaz general funciona en navegadores modernos aunque Web Serial no exista. El acceso físico al Arduino requiere Chrome, Edge o Chromium de escritorio con Web Serial habilitado, contexto HTTPS/localhost, permiso USB y ausencia de políticas administrativas que lo bloqueen. La aplicación detecta estas restricciones y no intenta evadirlas.
 
@@ -13,7 +13,7 @@ Pruebas sin hardware: `node firmware-flasher.test.mjs`, `node serial-lifecycle.t
 ## Primera conexión sin Arduino IDE
 
 1. Conecte Arduino Uno o Mega 2560 por USB.
-2. Inicie el servidor local y abra Testing Workbench en Chrome/Edge.
+2. Abra **https://chitoadrian.github.io/Testing-Workbench/** en Chrome/Edge.
 3. Pulse **Buscar dispositivo** y seleccione el puerto USB Serial.
 4. En **Firmware del Arduino**, elija manualmente Uno o Mega 2560.
 5. Pulse **Instalar firmware en Arduino**.
@@ -21,7 +21,7 @@ Pruebas sin hardware: `node firmware-flasher.test.mjs`, `node serial-lifecycle.t
 7. Espere **Carga completada**, el reinicio y la reconexión automática.
 8. Compruebe **Firmware HW-WORKBENCH v1.0.0** y **Arduino operativo ✓**.
 
-La demostración no requiere Arduino IDE, Arduino CLI ni Internet. Los HEX están incluidos en `firmware/uno` y `firmware/mega`. La placa debe conservar su bootloader Serial estándar; una placa sin bootloader requiere un programador ISP y no puede recuperarse desde Web Serial.
+La demostración no requiere Arduino IDE ni Arduino CLI; solo acceso al sitio HTTPS publicado. Los HEX están incluidos en `firmware/uno` y `firmware/mega`. La placa debe conservar su bootloader Serial estándar; una placa sin bootloader requiere un programador ISP y no puede recuperarse desde Web Serial.
 
 ### Cargador web AVR
 
@@ -31,12 +31,15 @@ La demostración no requiere Arduino IDE, Arduino CLI ni Internet. Los HEX está
 - La carga escribe solamente flash de aplicación y vuelve a leer cada página para verificarla. No escribe fuses, lock bits, EEPROM ni bootloader.
 - La sugerencia basada en VID/PID nunca reemplaza la elección manual, especialmente con clones CH340/CH341.
 
-## INICIO RÁPIDO
+## INICIO RÁPIDO — GitHub Pages, sin Arduino IDE
 
-1. Carga `firmware.ino` en la placa desde Arduino IDE. Instala **DHT sensor library** de Adafruit; para ESP32 instala además **ESP32Servo** (en Arduino AVR se usa la librería Servo incluida). Ajusta los pines al cableado real.
-2. En esta carpeta ejecuta un servidor local, por ejemplo `python -m http.server 8080`.
-3. Abre `http://localhost:8080` en Chrome o Edge, conecta la placa por USB y pulsa **Conectar dispositivo**.
-4. Selecciona `115200` baud, que coincide con el firmware. Para usar `9600`, cambia también `Serial.begin(115200)` en el firmware.
+1. Abra **https://chitoadrian.github.io/Testing-Workbench/** en Chrome o Edge.
+2. Conecte Arduino Uno/Mega mediante un cable USB de datos.
+3. Pulse **Buscar dispositivo** y autorice el puerto.
+4. Cuando el Workbench obtenga control real del puerto, use **Instalar firmware en Arduino**. Los HEX para Uno/Mega ya están incluidos en el sitio.
+5. Espere la carga, verificación, reinicio y PING/PONG automáticos.
+
+El servidor local se conserva únicamente para desarrollo. La demostración y la instalación normal usan GitHub Pages y no requieren Arduino IDE.
 
 Web Serial requiere un contexto seguro (`localhost` o HTTPS) y no funciona al abrir `index.html` directamente con `file://`. Firefox y Safari no ofrecen soporte completo. Cierra el Monitor Serial de Arduino IDE antes de conectar, pues un puerto solo puede ser usado por una aplicación a la vez.
 
@@ -63,8 +66,13 @@ Arduino Uno/Mega suele reiniciarse al abrir el puerto. La interfaz espera ese re
 
 - **Buscar dispositivo** siempre abre una selección nueva del navegador.
 - **Conectar dispositivo** reutiliza un puerto autorizado sólo cuando existe; si no, abre el selector.
-- **Reiniciar sesión Serial** cancela lecturas, libera locks, cierra el puerto y vuelve a consultar los permisos sin recargar la página.
+- Ante `NetworkError`, la página realiza hasta tres recuperaciones automáticas con esperas de 400, 900 y 1500 ms antes de declarar el puerto ocupado externamente.
+- **Recuperar puerto** aparece después de un fallo permanente, ejecuta una limpieza profunda, conserva el permiso y vuelve a localizar el último Arduino autorizado sin abrir el selector.
+- **Reiniciar sesión Serial** cancela operaciones, libera reader/writer y sus locks, espera streams de cierre, intenta cerrar el puerto aunque el estado interno esté desincronizado y vuelve a consultar permisos sin olvidarlos.
+- Web Locks y BroadcastChannel coordinan pestañas del mismo sitio. **Tomar control** solicita a la otra pestaña que libere voluntariamente el puerto; nunca rompe un lock por fuerza.
 - **Olvidar / cambiar dispositivo** usa la API `forget()` únicamente cuando el navegador la ofrece. Si no está disponible, cambie el permiso desde los ajustes del sitio de Chrome/Edge.
+
+La aplicación distingue un lock interno recuperable, otra pestaña del Workbench y un bloqueo externo probable. Si otra aplicación, Windows, Chrome o una política administrativa mantiene el COM, Web Serial no puede liberarlo por fuerza. Cierre la otra aplicación o pida al administrador que revise la política.
 
 Si un puerto autorizado dejó de existir después de desenchufar el USB, use **Buscar dispositivo**. Un permiso guardado no significa que el COM esté presente, abierto ni que el firmware responda.
 
@@ -131,6 +139,6 @@ En Arduino Uno, `Servo` utiliza Timer1 y `tone()` utiliza Timer2. Por eso LED y 
 
 - **Puerto abierto, firmware sin respuesta:** cargue primero el firmware Serial mínimo, confirme 115200 baud y cierre Serial Monitor.
 - **RX permanece en cero:** compruebe que el sketch correcto fue cargado, que el COM corresponde a la placa y que el cable transmite datos.
-- **Puerto ocupado:** cierre Arduino IDE Serial Monitor/Plotter y cualquier programa que use el COM.
+- **Puerto ocupado:** espere los tres reintentos automáticos y use **Recuperar puerto**. Si persiste, cierre otra pestaña, Arduino IDE Serial Monitor/Plotter y cualquier programa que use el COM. La página no puede forzar la liberación de un proceso externo.
 - **Arduino no aparece:** revise Windows, drivers, cable, puerto USB y CH340/CH341 en placas clon.
 - **DHT read failed:** revise cableado, tipo DHT11/DHT22 y dependencias; PING debe continuar funcionando.

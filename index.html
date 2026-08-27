@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#090d12">
   <title>HW Workbench — Serial Testing Console</title>
   <script>
-    window.__HW_BUILD_VERSION__ = '2026.08.20.1';
+    window.__HW_BUILD_VERSION__ = '2026.08.27.1';
     window.__HW_WORKBENCH_READY__ = false;
     (function () {
       var version = encodeURIComponent(window.__HW_BUILD_VERSION__);
@@ -67,6 +67,8 @@
           <button id="searchDeviceBtn" class="button primary">Buscar dispositivo</button>
           <button id="reconnectBtn" class="button secondary" disabled>Reconectar autorizado</button>
           <button id="testPingBtn" class="button secondary" disabled>Probar PING</button>
+          <button id="recoverSerialBtn" class="button primary" hidden>Recuperar puerto</button>
+          <button id="takeControlBtn" class="button secondary" hidden>Tomar control</button>
           <button id="resetSerialBtn" class="button secondary">Reiniciar sesión Serial</button>
           <button id="forgetDeviceBtn" class="button secondary">Olvidar / cambiar dispositivo</button>
           <button id="retryDiagnosticsBtn" class="button secondary">Reintentar diagnóstico</button>

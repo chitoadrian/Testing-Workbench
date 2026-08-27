@@ -15,7 +15,7 @@ function element(id) {
 globalThis.document = {
   readyState: 'loading', hidden: false,
   getElementById: element, addEventListener() {},
-  querySelectorAll() { return []; }, createElement: element
+  querySelector() { return element('firmware-panel'); }, querySelectorAll() { return []; }, createElement: element
 };
 globalThis.window = {
   isSecureContext: true, self: {}, top: {}, addEventListener() {}
@@ -26,6 +26,7 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { us
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 
 const { SerialWorkbench, withTimeout } = await import('./app.js');
+const { FirmwareManager } = await import('./firmware-manager.js');
 
 // Una operación lenta siempre termina y no deja un diagnóstico esperando para siempre.
 await assert.rejects(withTimeout(new Promise(() => {}), 10), error => error.name === 'TimeoutError');
@@ -105,4 +106,78 @@ assert.equal(monitor.paused,true);
 element('clearBtn').listeners.click();
 assert.equal(element('terminal').replaced,true);
 
-console.log('serial-lifecycle: 9 grupos de pruebas superados');
+function retryingPort(failures) {
+  let opens=0,opened=false;
+  const reader={async read(){return{done:true}},async cancel(){},releaseLock(){}};
+  const writer={async write(){},async close(){},releaseLock(){}};
+  const port={
+    getInfo(){return{usbVendorId:0x2341,usbProductId:0x0043}},
+    get readable(){return opened?{getReader(){return reader}}:null},
+    get writable(){return opened?{getWriter(){return writer}}:null},
+    async open(){opens++;if(opens<=failures)throw new DOMException('ocupado','NetworkError');opened=true;},
+    async close(){opened=false;}
+  };
+  return{port,get opens(){return opens}};
+}
+
+async function openWithFailures(failures) {
+  const fixture=retryingPort(failures),test=new SerialWorkbench();
+  test.port=fixture.port;test.recoveryDelays=[1,1,1];test.connectionState=()=>{};test.message=()=>{};test.log=()=>{};
+  navigator.serial.getPorts=async()=>[fixture.port];
+  await test.openPort({skipHandshake:true,skipOwnership:true});
+  return{fixture,test};
+}
+
+// NetworkError recuperable: éxito en segundo y tercer port.open().
+assert.equal((await openWithFailures(1)).fixture.opens,2);
+assert.equal((await openWithFailures(2)).fixture.opens,3);
+
+// NetworkError permanente: un intento inicial y como máximo tres reintentos.
+const permanent=retryingPort(99),permanentApp=new SerialWorkbench();
+permanentApp.port=permanent.port;permanentApp.recoveryDelays=[1,1,1];permanentApp.connectionState=()=>{};permanentApp.message=()=>{};permanentApp.log=()=>{};
+navigator.serial.getPorts=async()=>[permanent.port];
+await assert.rejects(permanentApp.openPort({skipHandshake:true,skipOwnership:true}),error=>error.name==='NetworkError');
+assert.equal(permanent.opens,4);
+assert.equal(permanentApp.externalPortBusy,true);
+
+// La limpieza continúa aunque reader, writer y port.close sean defectuosos.
+for(const defective of ['reader','writer','port']){
+  const deep=new SerialWorkbench(),steps=[];
+  deep.reader={async cancel(){steps.push('reader.cancel');if(defective==='reader')throw new Error('reader defectuoso');},releaseLock(){steps.push('reader.release');}};
+  deep.writer={async close(){steps.push('writer.close');if(defective==='writer')throw new Error('writer defectuoso');},releaseLock(){steps.push('writer.release');}};
+  deep.port={readable:{},async close(){steps.push('port.close');if(defective==='port')throw new Error('port defectuoso');}};
+  await deep.cleanupSerialConnection(`defective-${defective}`,{recovery:true});
+  assert.deepEqual(steps,['reader.cancel','reader.release','writer.close','writer.release','port.close']);
+  assert.equal(deep.reader,null);assert.equal(deep.writer,null);assert.equal(deep.port,null);
+}
+
+// Un doble clic durante recuperación solo inicia una reconexión.
+const doubleClick=new SerialWorkbench();let recoveries=0,recoveredOpens=0;
+doubleClick.recoverSerialPort=async()=>{recoveries++;await new Promise(resolve=>setTimeout(resolve,10));return{};};
+doubleClick.openPort=async()=>{recoveredOpens++;};
+await Promise.all([doubleClick.recoverAndReconnect(),doubleClick.recoverAndReconnect()]);
+assert.equal(recoveries,1);assert.equal(recoveredOpens,1);
+
+// Reiniciar sesión conserva autorización y permite reconectar después.
+const afterReset=new SerialWorkbench(),resetCandidate={};let resetOpens=0;
+afterReset.cleanupSerialConnection=async()=>{};afterReset.openPort=async()=>{resetOpens++;};
+navigator.serial.getPorts=async()=>[resetCandidate];
+await afterReset.resetSerialSession();await afterReset.reconnectAuthorized();
+assert.equal(afterReset.authorizedPorts[0],resetCandidate);assert.equal(resetOpens,1);
+
+// Una Web Lock ocupada por otra pestaña impide port.open() y ofrece toma voluntaria.
+const otherTab=new SerialWorkbench();otherTab.port={open(){throw new Error('no debe abrir')}};
+navigator.locks={request:async(_name,_options,callback)=>callback(null)};
+await assert.rejects(otherTab.openPort(),error=>error.name==='RemoteTabError');
+assert.equal(element('takeControlBtn').hidden,false);
+delete navigator.locks;
+
+// Firmware Manager no inicia flasheo si Workbench no controla realmente el puerto.
+const blockedApp={port:{getInfo(){return{usbVendorId:0x2341,usbProductId:0x0043}}},authorizedPorts:[],portIsOpen:false,externalPortBusy:true,canInstallFirmware:()=>false};
+const manager=new FirmwareManager(blockedApp);element('firmwareBoard').value='uno';
+manager.refreshPort();assert.match(element('firmwarePort').textContent,/Arduino Uno · USB 2341:0043/);
+await manager.install();
+assert.equal(element('firmwareStatus').textContent,'Puerto ocupado');
+assert.match(element('firmwareDetail').textContent,/puerto está ocupado/);
+
+console.log('serial-lifecycle: ciclo base, recuperación, fallos parciales, pestañas y bloqueo de firmware OK');
